@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard de Servicios</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.17.1/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels"></script> <!-- Agregado plugin para etiquetas de datos -->
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            transition: background-color 0.5s, color 0.5s;
+        }
+        h1 {
+            text-align: center;
+            transition: color 0.5s;
+        }
+        #chart-container {
+            width: 80%;
+            margin: 0 auto;
+            text-align: center;
+        }
+        #file-input, #generate-dashboard, #toggle-dark-mode, #presentation-mode {
+            display: block;
+            margin: 20px auto;
+        }
+        #generate-dashboard, #toggle-dark-mode, #presentation-mode {
+            padding: 10px 20px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background-color 0.3s;
+        }
+        #generate-dashboard:hover, #toggle-dark-mode:hover, #presentation-mode:hover {
+            background-color: #45a049;
+        }
+        .dark-mode {
+            background-color: #333;
+            color: white;
+        }
+        .dark-mode h1 {
+            color: white;
+        }
+        .presentation-mode {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+        .dark-mode .chartjs-render-monitor {
+            color: white !important;
+        }
+    </style>
+</head>
+<body>
+    <h1>Dashboard de Servicios</h1>
+    <div>
+        <input type="file" id="file-input" accept=".xlsx, .xls" />
+    </div>
+    <div>
+        <button id="generate-dashboard">Generar Dashboard</button>
+        <button id="toggle-dark-mode">Modo Oscuro</button>
+        <button id="presentation-mode">Modo Presentación</button>
+    </div>
+    <div id="chart-container">
+        <canvas id="chart" width="400" height="200"></canvas>
+    </div>
+
+    <script>
+        // Definir una variable global para los datos del Excel
+        let excelData = [];
+
+        // Detectar el archivo Excel y procesarlo
+        document.getElementById('file-input').addEventListener('change', function(event) {
+            const file = event.target.files[0];
+            if (file && file.name.endsWith('.xlsx')) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    const data = e.target.result;
+                    const workbook = XLSX.read(data, { type: 'binary' });
+                    const sheet = workbook.Sheets[workbook.SheetNames[0]];
+                    excelData = XLSX.utils.sheet_to_json(sheet);  // Guardar los datos globalmente
+                    alert('Archivo cargado exitosamente. Ahora puede generar el dashboard.');
+                };
+                reader.readAsBinaryString(file);
+            } else {
+                alert('Por favor, sube un archivo Excel válido (.xlsx)');
+            }
+        });
+
+        // Función para procesar los datos del Excel y agruparlos por DESC_PLAN
+        function processExcelData() {
+            if (excelData.length === 0) {
+                alert('Por favor, carga un archivo Excel primero.');
+                return;
+            }
+
+            // Agrupar los datos por DESC_PLAN
+            const groupedData = excelData.reduce((acc, row) => {
+                const serviceType = row.DESC_PLAN;  // Asumiendo que el campo para agrupar es DESC_PLAN
+                if (serviceType) {
+                    if (!acc[serviceType]) {
+                        acc[serviceType] = 0;
+                    }
+                    acc[serviceType]++;
+                }
+                return acc;
+            }, {});
+
+            // Preparar los datos para el gráfico
+            const labels = Object.keys(groupedData); // Tipos de servicio
+            const values = Object.values(groupedData); // Cantidad de casos
+
+            // Calcular los porcentajes
+            const total = values.reduce((sum, value) => sum + value, 0);
+            const percentages = values.map(value => ((value / total) * 100).toFixed(2));
+
+            // Crear el gráfico con Chart.js
+            const ctx = document.getElementById('chart').getContext('2d');
+            new Chart(ctx, {
+                type: 'bar',  // Tipo de gráfico de barras
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Cantidad de Casos por Servicio',
+                        data: values,
+                        backgroundColor: 'rgba(54, 162, 235, 0.2)',
+                        borderColor: 'rgba(54, 162, 235, 1)',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    indexAxis: 'y',  // Establecer el gráfico de barras en horizontal
+                    plugins: {
+                        datalabels: {
+                            color: '#fff',
+                            font: {
+                                size: 18,  // Aumentar el tamaño de la fuente
+                                weight: 'bold'
+                            },
+                            formatter: function(value, context) {
+                                return value + ' casos (' + percentages[context.dataIndex] + '%)';
+                            },
+                        }
+                    },
+                    scales: {
+                        x: {
+                            beginAtZero: true,
+                            title: {
+                                display: true,
+                                text: 'Cantidad de Casos',
+                                color: 'white'  // Etiquetas en color blanco en modo oscuro
+                            },
+                            ticks: {
+                                color: 'white'  // Ticks en color blanco en modo oscuro
+                            }
+                        },
+                        y: {
+                            title: {
+                                display: true,
+                                text: 'Tipo de Servicio',
+                                color: 'white'  // Etiquetas en color blanco en modo oscuro
+                            },
+                            ticks: {
+                                color: 'white'  // Ticks en color blanco en modo oscuro
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Agregar el evento al botón para generar el dashboard
+        document.getElementById('generate-dashboard').addEventListener('click', processExcelData);
+
+        // Activar/desactivar el modo oscuro
+        document.getElementById('toggle-dark-mode').addEventListener('click', function() {
+            document.body.classList.toggle('dark-mode');
+            document.getElementById('generate-dashboard').classList.toggle('dark-mode');
+            document.getElementById('toggle-dark-mode').classList.toggle('dark-mode');
+            document.getElementById('presentation-mode').classList.toggle('dark-mode');
+        });
+
+        // Activar el modo presentación
+        document.getElementById('presentation-mode').addEventListener('click', function() {
+            document.body.classList.toggle('presentation-mode');
+            document.getElementById('chart-container').classList.toggle('presentation-mode');
+        });
+    </script>
+</body>
+</html>
